@@ -202,16 +202,18 @@ def plot_rolling_mean(data, window=30):
     plt.grid(True, linestyle="--", alpha=0.5)
     plt.show()
 
-def decompose_time_series(data, asset="Close TSLA"):
+def decompose_time_series(data, asset):
     """Decompose time series into trend, seasonal, and residual components."""
     
+    # Perform decomposition on the specified asset column
     decomposition = seasonal_decompose(data[asset], model='additive', period=365)
 
+    # Create subplots for the observed, trend, seasonal, and residual components
     fig, (ax1, ax2, ax3, ax4) = plt.subplots(4, 1, figsize=(10, 8))
-    decomposition.observed.plot(ax=ax1, title="Observed")
-    decomposition.trend.plot(ax=ax2, title="Trend")
-    decomposition.seasonal.plot(ax=ax3, title="Seasonal")
-    decomposition.resid.plot(ax=ax4, title="Residual")
+    decomposition.observed.plot(ax=ax1, title=f"Observed: {asset}")
+    decomposition.trend.plot(ax=ax2, title=f"Trend: {asset}")
+    decomposition.seasonal.plot(ax=ax3, title=f"Seasonal: {asset}")
+    decomposition.resid.plot(ax=ax4, title=f"Residual: {asset}")
 
     plt.tight_layout()
     plt.show()
