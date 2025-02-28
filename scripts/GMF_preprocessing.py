@@ -8,8 +8,12 @@ from statsmodels.tsa.seasonal import seasonal_decompose
 
 def fetch_data(assets, start_date, end_date):
     """Fetch historical stock data from Yahoo Finance."""
-    data = yf.download(assets, start=start_date, end=end_date)["Adj Close"]
-    data.columns = assets  # Rename columns for clarity
+    # Fetch all columns of data for the given assets
+    data = yf.download(assets, start=start_date, end=end_date)
+    
+    # Flatten the MultiIndex columns into a single level by combining asset ticker with column name (e.g., 'AAPL Close', 'AAPL Volume')
+    data.columns = [f'{ticker} {col}' for ticker, col in data.columns]
+    
     return data
 
 def check_missing_values(data):
@@ -27,15 +31,20 @@ def preprocess_data(data):
     scaled_data = pd.DataFrame(scaler.fit_transform(data), columns=data.columns, index=data.index)
     return data, scaled_data
 
-def plot_closing_prices(data):
-    """Plot closing prices of assets."""
-    plt.figure(figsize=(12,6))
-    for column in data.columns:
-        plt.plot(data.index, data[column], label=column)
+def plot_closing_price(data, asset_name="TSLA"):
+    """Plot closing prices of a stock over time."""
+    plt.figure(figsize=(12, 6))
+    plt.plot(data.index, data[f'Close {asset_name}'], label='Closing Price', color='blue', linewidth=2)
+
+    # Add title and labels
+    plt.title(f"{asset_name} Closing Price Over Time", fontsize=14)
+    plt.xlabel("Date", fontsize=12)
+    plt.ylabel("Closing Price", fontsize=12)
+
+    # Improve readability
+    plt.grid(True, linestyle="--", alpha=0.5)
     plt.legend()
-    plt.title("Closing Prices of Assets")
-    plt.xlabel("Date")
-    plt.ylabel("Price")
+    
     plt.show()
 
 def plot_histogram(data):
