@@ -73,13 +73,30 @@ def train_arima_model(train_data, test_data):
 def train_sarima_model(train_data, test_data, seasonal_order=(1, 1, 1, 12)):
     """
     Train a SARIMA model and generate forecasts with confidence intervals.
+    
+    Parameters:
+        train_data (pd.Series): Training data (must have a proper datetime index with frequency set).
+        test_data (pd.Series): Testing data.
+        seasonal_order (tuple): Seasonal order (P, D, Q, S).
+    
+    Returns:
+        forecast (np.array): Forecasted values for the test data.
+        model: Fitted SARIMA model.
     """
+    # Ensure train_data index is a datetime index and set frequency if missing
+    if not isinstance(train_data.index, pd.DatetimeIndex):
+        train_data.index = pd.to_datetime(train_data.index)
+
+    if train_data.index.freq is None:
+        train_data = train_data.asfreq('D')  # Change 'D' to match your data's actual frequency (e.g., 'M' for monthly)
+
     model = SARIMAX(train_data, order=(1, 1, 1), seasonal_order=seasonal_order)
     model_fit = model.fit(disp=False)
     forecast = model_fit.get_forecast(steps=len(test_data))
     forecast_values = forecast.predicted_mean
     conf_int = forecast.conf_int()
-    return forecast_values, model_fit
+    
+    return forecast_values, conf_int, model_fit
 
 
 def train_lstm_model(train_data, test_data, n_steps=60, epochs=20, batch_size=32):
