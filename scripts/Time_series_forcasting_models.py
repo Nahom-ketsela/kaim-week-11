@@ -103,16 +103,20 @@ def train_lstm_model(train_data, test_data, n_steps=60, epochs=20, batch_size=32
     """
     Train an LSTM model and generate forecasts.
     """
+    # Normalize training data
     scaler = MinMaxScaler(feature_range=(0, 1))
     scaled_train = scaler.fit_transform(train_data.values.reshape(-1, 1))
     
+    # Prepare training sequences
     X_train, y_train = [], []
     for i in range(n_steps, len(scaled_train)):
-        X_train.append(scaled_train[i-n_steps:i, 0])
+        X_train.append(scaled_train[i - n_steps:i, 0])
         y_train.append(scaled_train[i, 0])
+
     X_train, y_train = np.array(X_train), np.array(y_train)
     X_train = np.reshape(X_train, (X_train.shape[0], X_train.shape[1], 1))
-    
+
+    # Define LSTM model
     model = Sequential([
         LSTM(units=50, return_sequences=True, input_shape=(X_train.shape[1], 1)),
         Dropout(0.2),
@@ -121,28 +125,31 @@ def train_lstm_model(train_data, test_data, n_steps=60, epochs=20, batch_size=32
         Dense(units=25),
         Dense(units=1)
     ])
-    
+
     model.compile(optimizer='adam', loss='mean_squared_error')
-    
+
+    # Train model with early stopping
     early_stopping = EarlyStopping(monitor='loss', patience=5, restore_best_weights=True)
     model.fit(X_train, y_train, batch_size=batch_size, epochs=epochs, callbacks=[early_stopping])
-    
-    # Use the last n_steps from train_data to initialize predictions
-    inputs = train_data[-n_steps:].values.reshape(-1, 1)
-    inputs = scaler.transform(inputs)
-    
-    # Prepare test data in the same way as training data
+
+
+    # Concatenate the last `n_steps` from train_data with test_data
+    full_series = pd.concat([train_data[-n_steps:], test_data])  
+    inputs = scaler.transform(full_series.values.reshape(-1, 1))
+
+    # Prepare test sequences
     X_test = []
-    for i in range(n_steps, len(test_data) + n_steps):
-        X_test.append(inputs[i-n_steps:i, 0])
+    for i in range(n_steps, len(inputs)):
+        X_test.append(inputs[i - n_steps:i, 0])
+    
     X_test = np.array(X_test)
     X_test = np.reshape(X_test, (X_test.shape[0], X_test.shape[1], 1))
-    
+
+    # Predict test data
     predicted_stock_price = model.predict(X_test)
     predicted_stock_price = scaler.inverse_transform(predicted_stock_price)
-    
-    return predicted_stock_price, model, scaler
 
+    return predicted_stock_price, model, scaler
 
 
 def evaluate_model(test_data, forecast, model_name):
