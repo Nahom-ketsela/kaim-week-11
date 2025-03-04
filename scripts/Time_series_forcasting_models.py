@@ -208,3 +208,148 @@ def evaluate_model(test_data, forecast, model_name):
     plt.ylabel('Stock Price')
     plt.legend()
     plt.show()
+
+
+def forecast_lstm_future(
+    model, 
+    data_series,    
+    scaler, 
+    n_steps=60, 
+    n_periods=126   
+):
+    """
+    Forecast the next 'n_periods' time steps using an trained LSTM model.
+    
+    Parameters
+    ----------
+    model : Trained LSTM model (Keras).
+    data_series : pd.Series
+        The *full* historical data up to the end of 2025. 
+        Must have a DatetimeIndex.
+    scaler : e.g., MinMaxScaler or StandardScaler used in training.
+    n_steps : int
+        The window size the LSTM model expects (e.g., 60 days).
+    n_periods : int
+        Number of future steps to forecast (126 ~ 6 mo; 252 ~ 12 mo, if daily freq).
+
+    Returns
+    -------
+    future_forecast : np.ndarray of shape (n_periods,)
+    future_dates : pd.DatetimeIndex
+    """
+
+    # Ensure data is sorted by date
+    data_series = data_series.sort_index()
+
+    # Convert to numpy and scale
+    full_data_arr = data_series.values.reshape(-1, 1)
+    full_data_scaled = scaler.transform(full_data_arr)
+
+    # Extract the final 'n_steps' from the dataset as the model input
+    if len(full_data_scaled) < n_steps:
+        raise ValueError("Not enough data to form a window of size n_steps.")
+    last_window = full_data_scaled[-n_steps:]  # shape (n_steps, 1)
+
+    # Iteratively predict n_periods steps ahead
+    future_scaled_preds = []
+    
+    X_input = last_window.copy()  # shape (n_steps, 1)
+
+    for _ in range(n_periods):
+        # Reshape for LSTM: (1 batch, n_steps timesteps, 1 feature)
+        X_input_reshaped = X_input.reshape(1, n_steps, 1)
+
+        # Predict the next step
+        pred_scaled = model.predict(X_input_reshaped)
+        # pred_scaled is shape (1,1), take pred_scaled[0,0] => float
+        next_val = pred_scaled[0, 0]
+
+        # Append to future predictions
+        future_scaled_preds.append(next_val)
+
+        # Shift the window: drop the oldest, append the new prediction
+        X_input = np.append(X_input[1:], [[next_val]], axis=0)
+
+    # Inverse-transform the forecast to original scale
+    future_forecast = scaler.inverse_transform(
+        np.array(future_scaled_preds).reshape(-1, 1)
+    ).flatten()
+
+    # Create a future date range 
+    last_date = data_series.index[-1]
+    future_dates = pd.date_range(
+        start=last_date, 
+        periods=n_periods + 1, 
+        freq='B'
+    )[1:]  # skip the last known date => start from the day after
+
+    # Plot the historical + forecast
+    plt.figure(figsize=(10, 6))
+    plt.plot(data_series.index, data_series, label='Historical Prices', color='blue')
+    plt.plot(future_dates, future_forecast, label='Forecast (Next 6–12 Months)', color='orange')
+    plt.title('LSTM Forecast')
+    plt.xlabel('Date')
+    plt.ylabel('Stock Price')
+    plt.legend()
+    plt.show()
+
+    return future_forecast, future_dates
+   
+
+def interpret_results(future_forecast, future_dates):
+    """
+    Interpret the forecasted results to identify trends, volatility, and risks.
+    
+    Parameters:
+        future_forecast (np.array): Forecasted values (length N).
+        future_dates (pd.DatetimeIndex): Dates for the forecasted values (length N).
+    """
+
+    # Safety check
+    if len(future_forecast) == 0 or len(future_dates) == 0:
+        print("No forecast data to interpret.")
+        return
+    if len(future_forecast) != len(future_dates):
+        print("Warning: future_forecast and future_dates are misaligned in length.")
+    
+    # Determine upward or downward trend based on first vs. last forecast
+    first_val = future_forecast[0]
+    last_val = future_forecast[-1]
+    trend = 'upward' if last_val > first_val else 'downward'
+    
+    # Calculate approximate date range in days/months
+    start_date = future_dates[0]
+    end_date   = future_dates[-1]
+    delta_days = (end_date - start_date).days
+    approx_months = round(delta_days / 30.44) 
+    
+    # Percentage change from first to last forecast
+    pct_change = (last_val - first_val) / first_val * 100 if first_val != 0 else 0
+    
+    # Measure volatility via standard deviation
+    volatility_abs = np.std(future_forecast)
+    mean_forecast  = np.mean(future_forecast)
+    volatility_rel = (volatility_abs / mean_forecast * 100) if mean_forecast != 0 else 0
+
+    # Print interpretation
+    # Trend
+    print(f"Forecast Period: {start_date.date()} to {end_date.date()} (~{approx_months} months)")
+    print(f"Trend: The forecast suggests a {trend} movement over this period.")
+    print(f"Price change: from {first_val:.2f} to {last_val:.2f} ({pct_change:+.2f}%).")
+
+    # Volatility
+    print(f"Volatility (std): {volatility_abs:.2f}")
+    print(f"Relative Volatility: {volatility_rel:.2f}% of average forecast value.\n")
+    
+    # Market opportunity/risk commentary
+    if trend == 'upward':
+        print("Potential Market Opportunity: The expected price increase may present buying opportunities.")
+    else:
+        print("Potential Market Risk: The expected price decline suggests caution in investment (or shorting opportunities).")
+    
+    # Additional risk commentary if volatility is high
+    if volatility_rel > 10:
+        print("Note: Volatility appears relatively high (std > 10% of mean). "
+              "This implies greater uncertainty in the forecast.")
+    else:
+        print("Volatility appears moderate, implying relatively stable expectations under the model.")
